@@ -202,6 +202,8 @@ def no_schedule_train(train_dataset: WizardOfWikipediaDataset, agent: Transforme
             tr_loss += loss.item()
             global_step += 1
 
+            if global_step % args.print_every == 0:
+                print(loss.item())
         print('\n' + str(tr_loss / global_step))
         try:
             PATH = args.save_dir + '/EP' + str(_) + '.pth'
