@@ -27,7 +27,8 @@ class ARG:
                  device='cpu',
                  max_grad_norm=1.0,
                  save_dir='./tmp',
-                 alpha=0.95):
+                 alpha=0.95,
+                 print_every=100):
         self.train_batch_size = train_batch_size
         self.max_steps = max_steps
         self.weight_decay = weight_decay
@@ -41,6 +42,7 @@ class ARG:
         self.max_grad_norm = max_grad_norm
         self.save_dir = save_dir
         self.alpha = alpha
+        self.print_every = print_every
 
 
 class WizardOfWikipediaDataset(Dataset):
@@ -121,13 +123,8 @@ def final_train_function(args: ARG,
                 agent.model.zero_grad()
                 global_step += 1
 
-            if 0 < args.max_steps < global_step:
-                epoch_iterator.close()
-                break
-
-        if 0 < args.max_steps < global_step:
-            train_iterator.close()
-            break
+            if global_step % args.print_every == 0:
+                print(loss.item())
         print('\n' + str(tr_loss / global_step))
         try:
             PATH = args.save_dir + '/EP' + str(_) + '.pth'
