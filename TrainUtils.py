@@ -4,7 +4,7 @@ import shutil
 
 import torch
 from torch.utils.data import RandomSampler, DataLoader, Dataset
-from transformers import AdamW, get_linear_schedule_with_warmup, get_constant_schedule_with_warmup
+from transformers import AdamW, get_linear_schedule_with_warmup, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
 from AgentModel import TransformerMemNetAgent
 from CommonUtils import trange, tqdm
 from DataUtils import compile_all_dialogs
@@ -29,7 +29,8 @@ class ARG:
                  save_dir='./tmp',
                  alpha=0.95,
                  print_every=100,
-                 warmup_method='linear_constant'):
+                 warmup_method='linear_constant',
+                 num_cycles=0.5):
         self.train_batch_size = train_batch_size
         self.max_steps = max_steps
         self.weight_decay = weight_decay
@@ -45,6 +46,7 @@ class ARG:
         self.alpha = alpha
         self.print_every = print_every
         self.warmup_method = warmup_method
+        self.num_circles = num_cycles
 
 
 class WizardOfWikipediaDataset(Dataset):
@@ -80,6 +82,18 @@ def final_train_function(args: ARG,
             scheduler = get_linear_schedule_with_warmup(
                 optimizer, num_warmup_steps=int(args.warmup_proportion * t_total), num_training_steps=t_total
             )
+    elif args.warmup_method == 'cosine':
+        if args.warmup_steps > 0:
+            scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
+                                                        num_warmup_steps=args.warmup_steps,
+                                                        num_training_steps=t_total,
+                                                        num_cycles=args.num_circles)
+        else:
+            scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
+                                                        num_warmup_steps=int(args.warmup_proportion * t_total),
+                                                        num_training_steps=t_total,
+                                                        num_cycles=args.num_circles)
+
     else:
         if args.warmup_steps > 0:
             scheduler = get_constant_schedule_with_warmup(optimizer=optimizer,
