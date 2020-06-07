@@ -74,6 +74,7 @@ def final_train_function(args: ARG,
     optimizer = AdamW(agent.model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
 
     if args.warmup_method == 'linear':
+        print('使用linear scheduler')
         if args.warmup_steps > 0:
             scheduler = get_linear_schedule_with_warmup(
                 optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
@@ -83,6 +84,7 @@ def final_train_function(args: ARG,
                 optimizer, num_warmup_steps=int(args.warmup_proportion * t_total), num_training_steps=t_total
             )
     elif args.warmup_method == 'cosine':
+        print('使用linear-cosine scheduler')
         if args.warmup_steps > 0:
             scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
                                                         num_warmup_steps=args.warmup_steps,
@@ -93,8 +95,8 @@ def final_train_function(args: ARG,
                                                         num_warmup_steps=int(args.warmup_proportion * t_total),
                                                         num_training_steps=t_total,
                                                         num_cycles=args.num_circles)
-
     else:
+        print('使用linear-constant scheduler')
         if args.warmup_steps > 0:
             scheduler = get_constant_schedule_with_warmup(optimizer=optimizer,
                                                           num_warmup_steps=args.warmup_steps)
