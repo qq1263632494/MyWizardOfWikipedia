@@ -95,6 +95,8 @@ def final_train_function(args: ARG,
 
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration")
+        epoch_loss = 0.0
+        epoch_step = 0
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -116,16 +118,18 @@ def final_train_function(args: ARG,
             loss.backward()
 
             tr_loss += loss.item()
+            epoch_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 torch.nn.utils.clip_grad_norm_(agent.model.parameters(), args.max_grad_norm)
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
                 agent.model.zero_grad()
                 global_step += 1
+                epoch_step += 1
 
             if global_step % args.print_every == 0:
                 print(loss.item())
-        print('\n' + str(tr_loss / global_step))
+        print('\n' + str(epoch_loss / epoch_step))
         try:
             PATH = args.save_dir + '/EP' + str(_) + '.pth'
             torch.save(agent.model, PATH)
