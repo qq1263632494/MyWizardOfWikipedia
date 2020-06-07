@@ -4,7 +4,7 @@ import shutil
 
 import torch
 from torch.utils.data import RandomSampler, DataLoader, Dataset
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW, get_linear_schedule_with_warmup, get_constant_schedule_with_warmup
 from AgentModel import TransformerMemNetAgent
 from CommonUtils import trange, tqdm
 from DataUtils import compile_all_dialogs
@@ -28,7 +28,8 @@ class ARG:
                  max_grad_norm=1.0,
                  save_dir='./tmp',
                  alpha=0.95,
-                 print_every=100):
+                 print_every=100,
+                 warmup_method='linear_constant'):
         self.train_batch_size = train_batch_size
         self.max_steps = max_steps
         self.weight_decay = weight_decay
@@ -43,6 +44,7 @@ class ARG:
         self.save_dir = save_dir
         self.alpha = alpha
         self.print_every = print_every
+        self.warmup_method = warmup_method
 
 
 class WizardOfWikipediaDataset(Dataset):
@@ -69,14 +71,22 @@ def final_train_function(args: ARG,
     # Prepare optimizer and schedule (linear warmup and decay)
     optimizer = AdamW(agent.model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
 
-    if args.warmup_steps > 0:
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
-        )
+    if args.warmup_method == 'linear':
+        if args.warmup_steps > 0:
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+            )
+        else:
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=int(args.warmup_proportion * t_total), num_training_steps=t_total
+            )
     else:
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=int(args.warmup_proportion * t_total), num_training_steps=t_total
-        )
+        if args.warmup_steps > 0:
+            scheduler = get_constant_schedule_with_warmup(optimizer=optimizer,
+                                                          num_warmup_steps=args.warmup_steps)
+        else:
+            scheduler = get_constant_schedule_with_warmup(
+                optimizer, num_warmup_steps=int(args.warmup_proportion * t_total))
 
     global_step = 1
     epochs_trained = 0
