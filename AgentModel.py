@@ -166,3 +166,24 @@ class TransformerMemNetAgent:
         print('[PREDICT UTTERANCE]')
         print(predict_sentence)
         return predict_sentence, choose_index
+
+    def generate_response_no_print(self, example:WizardOfWikipediaExample, device='cuda:0'):
+        utterances, knowledge_pools, response_inputs, response_outputs = self.tokenizer.tokenize_example_batch(
+            [example])
+
+        utterances = utterances.to(device)
+        knowledge_pools = knowledge_pools.to(device)
+        response_inputs = response_inputs.to(device)
+
+        predict_probabilities, utterance_knowledge_attentions = self.model(utterances, knowledge_pools,
+                                                                           response_inputs)
+        predict_token_sequence = torch.argmax(predict_probabilities, dim=2).squeeze(0).cpu().numpy().tolist()
+        choose_index = torch.argmax(utterance_knowledge_attentions, dim=1).squeeze(0).cpu().numpy().tolist()
+
+        real_predict_token_sequence = []
+        for token in predict_token_sequence:
+            if token != self.tokenizer.end_token_index:
+                real_predict_token_sequence.append(token)
+
+        predict_sentence = self.tokenizer.dictionary.vec2txt(real_predict_token_sequence)
+        return predict_sentence, choose_index
