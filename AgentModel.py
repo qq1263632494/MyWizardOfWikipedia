@@ -165,3 +165,4 @@ class TransformerMemNetAgent:
         print(example.knowledge_pool[choose_index])
         print('[PREDICT UTTERANCE]')
         print(predict_sentence)
+        return predict_sentence, choose_index
