@@ -151,7 +151,8 @@ class TransformerMemNetAgent:
 
         real_predict_token_sequence = []
         for token in predict_token_sequence:
-            real_predict_token_sequence.append(token)
+            if token != self.tokenizer.end_token_index:
+                real_predict_token_sequence.append(token)
 
         predict_sentence = self.tokenizer.dictionary.vec2txt(real_predict_token_sequence)
         print('[UTTERANCE]')
