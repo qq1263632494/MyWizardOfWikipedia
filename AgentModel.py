@@ -134,4 +134,33 @@ class TransformerMemNetAgent:
                                      response_outputs.view(-1))
         knowledge_choose_loss = self.loss_func(utterance_knowledge_attentions,
                                                choose_indexes)
-        return tokens_loss*alpha + knowledge_choose_loss*(1-alpha)
+        return tokens_loss * alpha + knowledge_choose_loss * (1 - alpha)
+
+    def generate_response(self, example: WizardOfWikipediaExample, device='cuda:0'):
+        utterances, knowledge_pools, response_inputs, response_outputs = self.tokenizer.tokenize_example_batch(
+            [example])
+
+        utterances = utterances.to(device)
+        knowledge_pools = knowledge_pools.to(device)
+        response_inputs = response_inputs.to(device)
+
+        predict_probabilities, utterance_knowledge_attentions = self.model(utterances, knowledge_pools,
+                                                                           response_inputs)
+        predict_token_sequence = torch.argmax(predict_probabilities, dim=2).squeeze(0).cpu().numpy().tolist()
+        choose_index = torch.argmax(utterance_knowledge_attentions, dim=1).squeeze(0).cpu().numpy().tolist()
+
+        real_predict_token_sequence = []
+        for token in predict_token_sequence:
+            real_predict_token_sequence.append(token)
+
+        predict_sentence = self.tokenizer.dictionary.vec2txt(real_predict_token_sequence)
+        print('[UTTERANCE]')
+        print(example.utterance)
+        print('[REAL GOLDEN SENTENCE]')
+        print(example.golden_sentence)
+        print('[REAL RESPONSE]')
+        print(example.response)
+        print('[PREDICT GOLDEN SENTENCE]')
+        print(example.knowledge_pool[choose_index])
+        print('[PREDICT UTTERANCE]')
+        print(predict_sentence)
