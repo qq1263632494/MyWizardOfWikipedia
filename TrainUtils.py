@@ -1,16 +1,19 @@
 # 提供参数的工具类
+import logging
 import os
 import shutil
 
 import torch
+from torch.optim import Adam
 from torch.utils.data import RandomSampler, DataLoader, Dataset
-from transformers import AdamW, get_linear_schedule_with_warmup, get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
+from transformers import AdamW, get_linear_schedule_with_warmup, get_constant_schedule_with_warmup, \
+    get_cosine_schedule_with_warmup
+
 from AgentModel import TransformerMemNetAgent
 from CommonUtils import trange, tqdm
 from DataUtils import compile_all_dialogs
 from FeatureUtils import Tokenizer
 from FileUtils import read_json
-from torch.optim import Adam
 
 
 class ARG:
@@ -239,6 +242,119 @@ def no_schedule_train(train_dataset: WizardOfWikipediaDataset, agent: Transforme
             PATH = args.save_dir + '/EP' + str(_) + '.pth'
             torch.save(agent.model, PATH)
             print('当前模型保存在：' + PATH)
+        except Exception:
+            print(Exception)
+
+    return global_step, tr_loss / global_step
+
+
+def dynamic_learning_rate_train_with_logger(args: ARG, train_dataset: WizardOfWikipediaDataset,
+                                            agent: TransformerMemNetAgent, logger_file='train.log'):
+    """ Train the model """
+    agent.model.to(args.device)
+    train_sampler = RandomSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+
+    # Prepare optimizer and schedule (linear warmup and decay)
+    optimizer = AdamW(agent.model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level=logging.INFO)
+    handler = logging.FileHandler(logger_file)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    if args.warmup_method == 'linear':
+        logger.info('使用linear scheduler')
+        if args.warmup_steps > 0:
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+            )
+        else:
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=int(args.warmup_proportion * t_total), num_training_steps=t_total
+            )
+    elif args.warmup_method == 'cosine':
+        logger.info(print('使用linear-cosine scheduler'))
+        if args.warmup_steps > 0:
+            scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
+                                                        num_warmup_steps=args.warmup_steps,
+                                                        num_training_steps=t_total,
+                                                        num_cycles=args.num_circles)
+        else:
+            scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer,
+                                                        num_warmup_steps=int(args.warmup_proportion * t_total),
+                                                        num_training_steps=t_total,
+                                                        num_cycles=args.num_circles)
+    else:
+        logger.info('使用linear-constant scheduler')
+        if args.warmup_steps > 0:
+            scheduler = get_constant_schedule_with_warmup(optimizer=optimizer,
+                                                          num_warmup_steps=args.warmup_steps)
+        else:
+            scheduler = get_constant_schedule_with_warmup(
+                optimizer, num_warmup_steps=int(args.warmup_proportion * t_total))
+
+    global_step = 1
+    epochs_trained = 0
+    steps_trained_in_current_epoch = 0
+
+    tr_loss, logging_loss = 0.0, 0.0
+    agent.model.zero_grad()
+    train_iterator = trange(
+        epochs_trained, int(args.num_train_epochs), desc="Epoch"
+    )
+
+    # 清空模型缓存目录
+    if os.path.isdir(args.save_dir):
+        shutil.rmtree(args.save_dir)
+    os.mkdir(args.save_dir)
+
+    for _ in train_iterator:
+        logger.info('EPOCH' + str(_))
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration")
+        epoch_loss = 0.0
+        epoch_step = 0
+        for step, batch in enumerate(epoch_iterator):
+
+            # Skip past any already trained steps if resuming training
+            if steps_trained_in_current_epoch > 0:
+                steps_trained_in_current_epoch -= 1
+                continue
+
+            agent.model.train()
+            keys = batch.keys()
+            inputs = {}
+            for key in keys:
+                inputs[key] = batch[key].to(args.device)
+
+            loss = agent.compute_train_batch_loss(inputs, args.alpha)
+
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            loss.backward()
+
+            tr_loss += loss.item()
+            epoch_loss += loss.item()
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                torch.nn.utils.clip_grad_norm_(agent.model.parameters(), args.max_grad_norm)
+                optimizer.step()
+                scheduler.step()  # Update learning rate schedule
+                agent.model.zero_grad()
+                global_step += 1
+                epoch_step += 1
+
+            if global_step % args.print_every == 0:
+                logger.info(loss.item())
+        logger.info('EPOCH' + str(_) + str(epoch_loss / epoch_step))
+        try:
+            PATH = args.save_dir + '/EP' + str(_) + '.pth'
+            torch.save(agent.model, PATH)
+            logger.info('当前模型保存在：' + PATH)
         except Exception:
             print(Exception)
 

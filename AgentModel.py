@@ -137,6 +137,7 @@ class TransformerMemNetAgent:
         return tokens_loss * alpha + knowledge_choose_loss * (1 - alpha)
 
     def generate_response(self, example: WizardOfWikipediaExample, device='cuda:0'):
+        self.model.eval()
         utterances, knowledge_pools, response_inputs, response_outputs = self.tokenizer.tokenize_example_batch(
             [example])
 
@@ -168,6 +169,7 @@ class TransformerMemNetAgent:
         return predict_sentence, choose_index
 
     def generate_response_no_print(self, example:WizardOfWikipediaExample, device='cuda:0'):
+        self.model.eval()
         utterances, knowledge_pools, response_inputs, response_outputs = self.tokenizer.tokenize_example_batch(
             [example])
 
